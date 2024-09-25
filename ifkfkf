@@ -1,0 +1,170 @@
+import React, { useEffect, useState } from 'react';
+import braintree from 'braintree-web';
+
+const PaymentForm = () => {
+  const [clientInstance, setClientInstance] = useState(null);
+  const [hostedFieldsInstance, setHostedFieldsInstance] = useState(null);
+  const [formState, setFormState] = useState({
+    ccName: '',
+    email: '',
+    isValid: {
+      ccName: false,
+      email: false,
+    },
+  });
+
+  useEffect(() => {
+    // Create Braintree client instance
+    braintree.client.create({
+      authorization: 'sandbox_g42y39zw_348pk9cgf3bgyw2b',
+    }, (err, instance) => {
+      if (err) {
+        console.error(err);
+        return;
+      }
+      setClientInstance(instance);
+      createHostedFields(instance);
+    });
+  }, []);
+
+  const createHostedFields = (clientInstance) => {
+    braintree.hostedFields.create({
+      client: clientInstance,
+      styles: {
+        input: {
+          'font-size': '1rem',
+          color: '#495057',
+        },
+      },
+      fields: {
+        cardholderName: {
+          selector: '#cc-name',
+          placeholder: 'Name as it appears on your card',
+        },
+        number: {
+          selector: '#cc-number',
+          placeholder: '4111 1111 1111 1111',
+        },
+        cvv: {
+          selector: '#cc-cvv',
+          placeholder: '123',
+        },
+        expirationDate: {
+          selector: '#cc-expiration',
+          placeholder: 'MM / YY',
+        },
+      },
+    }, (err, instance) => {
+      if (err) {
+        console.error(err);
+        return;
+      }
+      setHostedFieldsInstance(instance);
+      setupValidityChange(instance);
+    });
+  };
+
+  const setupValidityChange = (instance) => {
+    instance.on('validityChange', (event) => {
+      const field = event.fields[event.emittedBy];
+      const isValid = field.isValid;
+      const container = document.querySelector(field.container);
+
+      if (isValid) {
+        container.classList.remove('is-invalid');
+        container.classList.add('is-valid');
+      } else {
+        container.classList.add('is-invalid');
+      }
+    });
+  };
+
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setFormState((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+    validateField(name, value);
+  };
+
+  const validateField = (name, value) => {
+    let isValid = true;
+    if (name === 'email') {
+      isValid = /\S+@\S+\.\S+/.test(value);
+    } else {
+      isValid = value.trim() !== '';
+    }
+    setFormState((prev) => ({
+      ...prev,
+      isValid: {
+        ...prev.isValid,
+        [name]: isValid,
+      },
+    }));
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    const { isValid } = formState;
+
+    // Check overall form validity
+    if (!isValid.ccName || !isValid.email) {
+      alert("Please fill out all fields correctly.");
+      return;
+    }
+
+    hostedFieldsInstance.tokenize((err, payload) => {
+      if (err) {
+        console.error(err);
+        alert("An error occurred while processing your payment. Please try again.");
+        return;
+      }
+
+      // Send payload.nonce to your server
+      alert("Payment successful!");
+    });
+  };
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <div>
+        <label htmlFor="cc-name">Cardholder Name</label>
+        <input
+          type="text"
+          id="cc-name"
+          name="ccName"
+          value={formState.ccName}
+          onChange={handleInputChange}
+          required
+        />
+      </div>
+      <div>
+        <label htmlFor="cc-number">Card Number</label>
+        <div id="cc-number"></div>
+      </div>
+      <div>
+        <label htmlFor="cc-cvv">CVV</label>
+        <div id="cc-cvv"></div>
+      </div>
+      <div>
+        <label htmlFor="cc-expiration">Expiration Date</label>
+        <div id="cc-expiration"></div>
+      </div>
+      <div>
+        <label htmlFor="email">Email</label>
+        <input
+          type="email"
+          id="email"
+          name="email"
+          value={formState.email}
+          onChange={handleInputChange}
+          required
+        />
+      </div>
+      <button type="submit">Pay</button>
+    </form>
+  );
+};
+
+export default PaymentForm;
